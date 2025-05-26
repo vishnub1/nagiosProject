@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Nagios Alert Dashboard - Full View</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background-color: #f4f4f4;
+    }
+    h2 {
+      margin-top: 20px;
+    }
+    select, input[type="file"] {
+      margin-right: 10px;
+      padding: 5px;
+    }
+    .charts-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 30px;
+      margin-top: 20px;
+    }
+    .chart-box {
+      background: white;
+      padding: 20px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      border-radius: 8px;
+      flex: 1;
+      min-width: 400px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Nagios Alert Dashboard</h1>
+
+  <div>
+    <label>Upload JSON File:</label>
+    <input type="file" id="fileUpload" accept=".json">
+
+    <label for="dateSelect">Select Date:</label>
+    <select id="dateSelect">
+      <option value="all">All Dates</option>
+    </select>
+  </div>
+
+  <div class="charts-container">
+    <div class="chart-box">
+      <h2>Alert State Pie Chart</h2>
+      <div id="statePieChart"></div>
+    </div>
+    <div class="chart-box">
+      <h2>Top Critical Hosts</h2>
+      <div id="criticalChart"></div>
+    </div>
+    <div class="chart-box">
+      <h2>Top Warning Hosts</h2>
+      <div id="warningChart"></div>
+    </div>
+    <div class="chart-box">
+      <h2>Top Services</h2>
+      <div id="serviceChart"></div>
+    </div>
+  </div>
+
+  <script>
+    let jsonData = [];
+
+    document.getElementById("fileUpload").addEventListener("change", function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        try {
+          jsonData = JSON.parse(event.target.result);
+          populateDates(jsonData);
+          renderAllCharts(jsonData);
+        } catch (err) {
+          alert("Invalid JSON file.");
+        }
+      };
+      reader.readAsText(file);
+    });
+
+    document.getElementById("dateSelect").addEventListener("change", () => {
+      const selectedDate = document.getElementById("dateSelect").value;
+      const filteredData = selectedDate === "all" ? jsonData : jsonData.filter(row => row.Date === selectedDate);
+      renderAllCharts(filteredData);
+    });
+
+    function populateDates(data) {
+      const dateSet = new Set(data.map(d => d.Date));
+      const select = document.getElementById("dateSelect");
+      select.innerHTML = '<option value="all">All Dates</option>';
+      [...dateSet].sort().forEach(date => {
+        const opt = document.createElement("option");
+        opt.value = date;
+        opt.textContent = date;
+        select.appendChild(opt);
+      });
+    }
+
+    function renderAllCharts(data) {
+      renderStatePieChart(data);
+      renderTopHostsChart(data, "CRITICAL", "criticalChart", "Top Hosts in CRITICAL");
+      renderTopHostsChart(data, "WARNING", "warningChart", "Top Hosts in WARNING");
+      renderTopServicesChart(data);
+    }
+
+    function renderStatePieChart(data) {
+      const stateCount = {};
+      data.forEach(row => {
+        if (row.State) {
+          stateCount[row.State] = (stateCount[row.State] || 0) + 1;
+        }
+      });
+      const states = Object.keys(stateCount);
+      const values = Object.values(stateCount);
+
+      const pieData = [{ labels: states, values: values, type: 'pie' }];
+      const layout = { title: "Alert State Distribution" };
+      Plotly.newPlot('statePieChart', pieData, layout);
+    }
+
+    function renderTopHostsChart(data, state, divId, title) {
+      const counts = {};
+      data.filter(d => d.State === state).forEach(row => {
+        const host = row.Host || "Unknown";
+        counts[host] = (counts[host] || 0) + 1;
+      });
+      const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+      const hosts = sorted.map(entry => entry[0]);
+      const values = sorted.map(entry => entry[1]);
+
+      const trace = { type: 'bar', x: hosts, y: values, marker: { color: 'salmon' } };
+      const layout = { title: title, xaxis: { tickangle: -45 } };
+      Plotly.newPlot(divId, [trace], layout);
+    }
+
+    function renderTopServicesChart(data) {
+      const serviceCount = {};
+      data.forEach(row => {
+        const service = row.Service || "Unknown";
+        serviceCount[service] = (serviceCount[service] || 0) + 1;
+      });
+      const sorted = Object.entries(serviceCount).sort((a, b) => b[1] - a[1]);
+      const services = sorted.map(entry => entry[0]);
+      const counts = sorted.map(entry => entry[1]);
+
+      const trace = { type: 'bar', x: services, y: counts, marker: { color: 'steelblue' } };
+      const layout = { title: "Top Alerted Services", xaxis: { tickangle: -45 } };
+      Plotly.newPlot('serviceChart', [trace], layout);
+    }
+  </script>
+</body>
+</html>
