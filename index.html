@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Nagios Alert Dashboard - Full View</title>
+  <title>Nagios Alert Dashboard</title>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
   <style>
     body {
@@ -10,7 +10,7 @@
       padding: 20px;
       background-color: #f4f4f4;
     }
-    h2 {
+    h1, h2 {
       margin-top: 20px;
     }
     select, input[type="file"] {
@@ -30,6 +30,15 @@
       border-radius: 8px;
       flex: 1;
       min-width: 400px;
+    }
+    .control-section {
+      margin-bottom: 20px;
+    }
+    #filteredChart {
+      width: 100%;
+      max-width: 1000px;
+      height: 500px;
+      margin-top: 20px;
     }
   </style>
 </head>
@@ -65,6 +74,22 @@
     </div>
   </div>
 
+  <h2>Filter by Service or State</h2>
+
+  <div class="control-section">
+    <label for="serviceSelect">Select Service:</label>
+    <select id="serviceSelect">
+      <option value="">-- Choose Service --</option>
+    </select>
+
+    <label for="stateSelect">Select State:</label>
+    <select id="stateSelect">
+      <option value="">-- Choose State --</option>
+    </select>
+  </div>
+
+  <div id="filteredChart"></div>
+
   <script>
     let jsonData = [];
 
@@ -77,6 +102,7 @@
         try {
           jsonData = JSON.parse(event.target.result);
           populateDates(jsonData);
+          populateDropdowns(jsonData);
           renderAllCharts(jsonData);
         } catch (err) {
           alert("Invalid JSON file.");
@@ -102,6 +128,48 @@
         select.appendChild(opt);
       });
     }
+
+    function populateDropdowns(data) {
+      const services = new Set();
+      const states = new Set();
+
+      data.forEach(alert => {
+        if (alert["Service"]) services.add(alert["Service"]);
+        if (alert["State"]) states.add(alert["State"]);
+      });
+
+      const serviceSelect = document.getElementById("serviceSelect");
+      const stateSelect = document.getElementById("stateSelect");
+
+      serviceSelect.innerHTML = '<option value="">-- Choose Service --</option>';
+      stateSelect.innerHTML = '<option value="">-- Choose State --</option>';
+
+      [...services].sort().forEach(service => {
+        const opt = document.createElement("option");
+        opt.value = service;
+        opt.textContent = service;
+        serviceSelect.appendChild(opt);
+      });
+
+      [...states].sort().forEach(state => {
+        const opt = document.createElement("option");
+        opt.value = state;
+        opt.textContent = state;
+        stateSelect.appendChild(opt);
+      });
+    }
+
+    document.getElementById("serviceSelect").addEventListener("change", () => {
+      document.getElementById("stateSelect").value = "";
+      const selectedService = document.getElementById("serviceSelect").value;
+      if (selectedService) renderHostBarChart(jsonData, "Service", selectedService);
+    });
+
+    document.getElementById("stateSelect").addEventListener("change", () => {
+      document.getElementById("serviceSelect").value = "";
+      const selectedState = document.getElementById("stateSelect").value;
+      if (selectedState) renderHostBarChart(jsonData, "State", selectedState);
+    });
 
     function renderAllCharts(data) {
       renderStatePieChart(data);
@@ -153,6 +221,36 @@
       const trace = { type: 'bar', x: services, y: counts, marker: { color: 'steelblue' } };
       const layout = { title: "Top Alerted Services", xaxis: { tickangle: -45 } };
       Plotly.newPlot('serviceChart', [trace], layout);
+    }
+
+    function renderHostBarChart(data, filterType, filterValue) {
+      const filtered = data.filter(alert => alert[filterType] === filterValue);
+      const hostCounts = {};
+
+      filtered.forEach(alert => {
+        const host = alert["Host"] || "Unknown";
+        hostCounts[host] = (hostCounts[host] || 0) + 1;
+      });
+
+      const sorted = Object.entries(hostCounts).sort((a, b) => b[1] - a[1]);
+      const hosts = sorted.map(entry => entry[0]);
+      const counts = sorted.map(entry => entry[1]);
+
+      const barData = [{
+        type: "bar",
+        x: hosts,
+        y: counts,
+        marker: { color: 'rgb(100, 149, 237)' }
+      }];
+
+      const layout = {
+        title: `Hosts with Alerts filtered by ${filterType}: ${filterValue}`,
+        xaxis: { title: "Host", tickangle: -45, automargin: true },
+        yaxis: { title: "Alert Count" },
+        margin: { t: 60, b: 120 }
+      };
+
+      Plotly.newPlot('filteredChart', barData, layout);
     }
   </script>
 </body>
