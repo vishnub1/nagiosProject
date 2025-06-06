@@ -7,103 +7,145 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      padding: 20px;
+      margin: 0;
       background-color: #f4f4f4;
+      display: flex;
+      height: 100vh;
     }
-    h1, h2 {
+
+    .sidebar {
+      width: 260px;
+      background: #333;
+      color: white;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+
+    .sidebar h2 {
+      font-size: 18px;
+      margin-bottom: 15px;
+    }
+
+    .sidebar label {
+      display: block;
+      margin-top: 10px;
+      margin-bottom: 5px;
+    }
+
+    .sidebar select,
+    .sidebar input[type="file"] {
+      width: 100%;
+      padding: 6px;
+      margin-bottom: 10px;
+      border: none;
+      border-radius: 4px;
+    }
+
+    .sidebar a {
+      display: block;
+      background-color: #007bff;
+      color: white;
+      text-align: center;
+      padding: 10px;
       margin-top: 20px;
+      border-radius: 4px;
+      text-decoration: none;
+      font-weight: bold;
     }
-    select, input[type="file"] {
-      margin-right: 10px;
-      padding: 5px;
+
+    .sidebar a:hover {
+      background-color: #0056b3;
     }
+
+    .content {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    h1 {
+      margin-top: 0;
+    }
+
     .charts-container {
       display: flex;
       flex-wrap: wrap;
       gap: 30px;
       margin-top: 20px;
     }
+
     .chart-box {
       background: white;
       padding: 20px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
       border-radius: 8px;
-      flex: 1;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
       min-width: 400px;
+      flex: 1 1 100%;
     }
-    .control-section {
-      margin-bottom: 20px;
+
+    .wide-chart {
+      min-width: 100%;
     }
-    #filteredChart {
+
+    #serviceChart {
       width: 100%;
-      max-width: 1000px;
-      height: 500px;
-      margin-top: 20px;
     }
   </style>
 </head>
 <body>
-  <h1>Nagios Alert Dashboard</h1>
+  <div class="sidebar">
+    <h2>Upload & Filter</h2>
 
-  <div>
-    <label>Upload JSON File:</label>
+    <label for="fileUpload">Upload JSON File:</label>
     <input type="file" id="fileUpload" accept=".json">
 
     <label for="dateSelect">Select Date:</label>
     <select id="dateSelect">
       <option value="all">All Dates</option>
     </select>
+
+    <a href="service-filter.html" target="_blank">🔍 Filter by Service or State</a>
   </div>
 
-  <div class="charts-container">
-    <div class="chart-box">
-      <h2>Alert State Pie Chart</h2>
-      <div id="statePieChart"></div>
-    </div>
-    <div class="chart-box">
-      <h2>Top Critical Hosts</h2>
-      <div id="criticalChart"></div>
-    </div>
-    <div class="chart-box">
-      <h2>Top Warning Hosts</h2>
-      <div id="warningChart"></div>
-    </div>
-    <div class="chart-box">
-      <h2>Top Services</h2>
-      <div id="serviceChart"></div>
+  <div class="content">
+    <h1>Nagios Alert Dashboard</h1>
+
+    <div class="charts-container">
+      <div class="chart-box">
+        <h2>Alert State Pie Chart</h2>
+        <div id="statePieChart"></div>
+      </div>
+
+      <div class="chart-box wide-chart">
+        <h2>Top Critical Hosts</h2>
+        <div id="criticalChart"></div>
+      </div>
+
+      <div class="chart-box wide-chart">
+        <h2>Top Warning Hosts</h2>
+        <div id="warningChart"></div>
+      </div>
+
+      <div class="chart-box">
+        <h2>Top Alerted Services</h2>
+        <div id="serviceChart"></div>
+      </div>
     </div>
   </div>
-
-  <h2>Filter by Service or State</h2>
-
-  <div class="control-section">
-    <label for="serviceSelect">Select Service:</label>
-    <select id="serviceSelect">
-      <option value="">-- Choose Service --</option>
-    </select>
-
-    <label for="stateSelect">Select State:</label>
-    <select id="stateSelect">
-      <option value="">-- Choose State --</option>
-    </select>
-  </div>
-
-  <div id="filteredChart"></div>
 
   <script>
     let jsonData = [];
 
-    document.getElementById("fileUpload").addEventListener("change", function(e) {
+    document.getElementById("fileUpload").addEventListener("change", function (e) {
       const file = e.target.files[0];
       if (!file) return;
 
       const reader = new FileReader();
-      reader.onload = function(event) {
+      reader.onload = function (event) {
         try {
           jsonData = JSON.parse(event.target.result);
-          populateDates(jsonData);
           populateDropdowns(jsonData);
-          renderAllCharts(jsonData);
+          renderAllCharts(getFilteredData());
         } catch (err) {
           alert("Invalid JSON file.");
         }
@@ -111,65 +153,31 @@
       reader.readAsText(file);
     });
 
-    document.getElementById("dateSelect").addEventListener("change", () => {
-      const selectedDate = document.getElementById("dateSelect").value;
-      const filteredData = selectedDate === "all" ? jsonData : jsonData.filter(row => row.Date === selectedDate);
-      renderAllCharts(filteredData);
-    });
+    document.getElementById("dateSelect").addEventListener("change", () => renderAllCharts(getFilteredData()));
 
-    function populateDates(data) {
-      const dateSet = new Set(data.map(d => d.Date));
-      const select = document.getElementById("dateSelect");
-      select.innerHTML = '<option value="all">All Dates</option>';
-      [...dateSet].sort().forEach(date => {
-        const opt = document.createElement("option");
-        opt.value = date;
-        opt.textContent = date;
-        select.appendChild(opt);
+    function getFilteredData() {
+      const selectedDate = document.getElementById("dateSelect").value;
+      return jsonData.filter(row => {
+        return selectedDate === "all" || row.Date === selectedDate;
       });
     }
 
     function populateDropdowns(data) {
-      const services = new Set();
-      const states = new Set();
+      const dates = new Set();
 
-      data.forEach(alert => {
-        if (alert["Service"]) services.add(alert["Service"]);
-        if (alert["State"]) states.add(alert["State"]);
+      data.forEach(d => {
+        if (d.Date) dates.add(d.Date);
       });
 
-      const serviceSelect = document.getElementById("serviceSelect");
-      const stateSelect = document.getElementById("stateSelect");
-
-      serviceSelect.innerHTML = '<option value="">-- Choose Service --</option>';
-      stateSelect.innerHTML = '<option value="">-- Choose State --</option>';
-
-      [...services].sort().forEach(service => {
+      const dateSelect = document.getElementById("dateSelect");
+      dateSelect.innerHTML = `<option value="all">All Dates</option>`;
+      [...dates].sort().forEach(date => {
         const opt = document.createElement("option");
-        opt.value = service;
-        opt.textContent = service;
-        serviceSelect.appendChild(opt);
-      });
-
-      [...states].sort().forEach(state => {
-        const opt = document.createElement("option");
-        opt.value = state;
-        opt.textContent = state;
-        stateSelect.appendChild(opt);
+        opt.value = date;
+        opt.textContent = date;
+        dateSelect.appendChild(opt);
       });
     }
-
-    document.getElementById("serviceSelect").addEventListener("change", () => {
-      document.getElementById("stateSelect").value = "";
-      const selectedService = document.getElementById("serviceSelect").value;
-      if (selectedService) renderHostBarChart(jsonData, "Service", selectedService);
-    });
-
-    document.getElementById("stateSelect").addEventListener("change", () => {
-      document.getElementById("serviceSelect").value = "";
-      const selectedState = document.getElementById("stateSelect").value;
-      if (selectedState) renderHostBarChart(jsonData, "State", selectedState);
-    });
 
     function renderAllCharts(data) {
       renderStatePieChart(data);
@@ -179,18 +187,16 @@
     }
 
     function renderStatePieChart(data) {
-      const stateCount = {};
-      data.forEach(row => {
-        if (row.State) {
-          stateCount[row.State] = (stateCount[row.State] || 0) + 1;
-        }
+      const counts = {};
+      data.forEach(d => {
+        if (d.State) counts[d.State] = (counts[d.State] || 0) + 1;
       });
-      const states = Object.keys(stateCount);
-      const values = Object.values(stateCount);
 
-      const pieData = [{ labels: states, values: values, type: 'pie' }];
-      const layout = { title: "Alert State Distribution" };
-      Plotly.newPlot('statePieChart', pieData, layout);
+      Plotly.newPlot("statePieChart", [{
+        type: "pie",
+        labels: Object.keys(counts),
+        values: Object.values(counts)
+      }], { title: "Alert State Distribution" });
     }
 
     function renderTopHostsChart(data, state, divId, title) {
@@ -199,58 +205,44 @@
         const host = row.Host || "Unknown";
         counts[host] = (counts[host] || 0) + 1;
       });
-      const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-      const hosts = sorted.map(entry => entry[0]);
-      const values = sorted.map(entry => entry[1]);
 
-      const trace = { type: 'bar', x: hosts, y: values, marker: { color: 'salmon' } };
-      const layout = { title: title, xaxis: { tickangle: -45 } };
-      Plotly.newPlot(divId, [trace], layout);
+      const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+      const hosts = sorted.map(x => x[0]);
+      const values = sorted.map(x => x[1]);
+
+      Plotly.newPlot(divId, [{
+        type: "bar",
+        x: hosts,
+        y: values,
+        marker: { color: state === "CRITICAL" ? "tomato" : "orange" }
+      }], {
+        title: title,
+        xaxis: { tickangle: -45, automargin: true },
+        margin: { t: 60, b: 120 }
+      });
     }
 
     function renderTopServicesChart(data) {
-      const serviceCount = {};
+      const counts = {};
       data.forEach(row => {
         const service = row.Service || "Unknown";
-        serviceCount[service] = (serviceCount[service] || 0) + 1;
+        counts[service] = (counts[service] || 0) + 1;
       });
-      const sorted = Object.entries(serviceCount).sort((a, b) => b[1] - a[1]);
+
+      const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
       const services = sorted.map(entry => entry[0]);
-      const counts = sorted.map(entry => entry[1]);
+      const countsList = sorted.map(entry => entry[1]);
 
-      const trace = { type: 'bar', x: services, y: counts, marker: { color: 'steelblue' } };
-      const layout = { title: "Top Alerted Services", xaxis: { tickangle: -45 } };
-      Plotly.newPlot('serviceChart', [trace], layout);
-    }
-
-    function renderHostBarChart(data, filterType, filterValue) {
-      const filtered = data.filter(alert => alert[filterType] === filterValue);
-      const hostCounts = {};
-
-      filtered.forEach(alert => {
-        const host = alert["Host"] || "Unknown";
-        hostCounts[host] = (hostCounts[host] || 0) + 1;
-      });
-
-      const sorted = Object.entries(hostCounts).sort((a, b) => b[1] - a[1]);
-      const hosts = sorted.map(entry => entry[0]);
-      const counts = sorted.map(entry => entry[1]);
-
-      const barData = [{
+      Plotly.newPlot("serviceChart", [{
         type: "bar",
-        x: hosts,
-        y: counts,
-        marker: { color: 'rgb(100, 149, 237)' }
-      }];
-
-      const layout = {
-        title: `Hosts with Alerts filtered by ${filterType}: ${filterValue}`,
-        xaxis: { title: "Host", tickangle: -45, automargin: true },
-        yaxis: { title: "Alert Count" },
+        x: services,
+        y: countsList,
+        marker: { color: "steelblue" }
+      }], {
+        title: "Top Alerted Services",
+        xaxis: { tickangle: -45, automargin: true },
         margin: { t: 60, b: 120 }
-      };
-
-      Plotly.newPlot('filteredChart', barData, layout);
+      });
     }
   </script>
 </body>
